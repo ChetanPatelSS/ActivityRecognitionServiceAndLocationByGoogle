@@ -16,11 +16,9 @@
 package com.google.android.gms.location.sample.activityrecognition
 
 import android.Manifest
-import android.app.PendingIntent
 import android.content.*
 import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
 import android.net.Uri
 import android.os.*
@@ -38,7 +36,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import androidx.work.*
 import com.google.android.gms.location.ActivityRecognitionClient
 import com.google.android.gms.location.DetectedActivity
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -55,9 +52,8 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.TimeUnit
 
-class MainActivity : AppCompatActivity(), GPSCallback{
+class HomeActivity : AppCompatActivity(), GPSCallback{
     private var mContext: Context? = null
 
     /**
@@ -323,7 +319,7 @@ class MainActivity : AppCompatActivity(), GPSCallback{
 
     private fun startLocationPermissionRequest() {
         ActivityCompat.requestPermissions(
-            this@MainActivity,
+            this@HomeActivity,
             arrayOf(Manifest.permission.ACTIVITY_RECOGNITION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION),
             REQUEST_PERMISSIONS_REQUEST_CODE
         )
@@ -363,7 +359,7 @@ class MainActivity : AppCompatActivity(), GPSCallback{
     private fun getCurrentSpeed() {
         Log.d("GPSSpeed", "speed-1-getCurrentSpeed-1")
         locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
-        gpsManager = GPSManager(this@MainActivity)
+        gpsManager = GPSManager(this@HomeActivity)
         isGPSEnabled = locationManager!!.isProviderEnabled(LocationManager.GPS_PROVIDER)
         if (isGPSEnabled) {
             Log.d("GPSSpeed", "speed-3-getCurrentSpeed-2")
