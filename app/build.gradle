@@ -1,0 +1,54 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-kapt'
+apply plugin: 'kotlin-android'
+
+android {
+    compileSdkVersion 32
+    defaultConfig {
+        applicationId "com.google.android.gms.location.sample.activityrecognition"
+        minSdkVersion 21
+        targetSdkVersion 32
+        versionCode 1
+        versionName "1.0"
+
+        kapt {
+            arguments {
+                arg("room.schemaLocation", "$projectDir/schemas")
+            }
+        }
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments += [
+                        "room.schemaLocation": "$projectDir/schemas".toString()
+                ]
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    androidTestImplementation('androidx.test.espresso:espresso-core:3.1.1', {
+        exclude group: 'com.android.support', module: 'support-annotations'
+    })
+    implementation 'androidx.appcompat:appcompat:1.5.1'
+    testImplementation 'junit:junit:4.13.2'
+
+    implementation 'com.google.android.material:material:1.7.0'
+    implementation 'com.google.android.gms:play-services-location:20.0.0'
+
+    implementation 'com.google.code.gson:gson:2.10'
+
+    // Room
+    implementation 'androidx.room:room-runtime:2.4.3'
+    kapt 'androidx.room:room-compiler:2.4.3'
+    implementation 'androidx.room:room-ktx:2.4.3' // Kotlin Extensions and Coroutines support for Room
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.5.1' // LifecycleScope
+
+    implementation 'androidx.work:work-runtime-ktx:2.7.1'
+}
