@@ -109,9 +109,11 @@ class HomeActivity : AppCompatActivity(), GPSCallback{
         detectedActivitiesListView.adapter = mAdapter
         setRecyclerView()
         observeActivity()
-        if (updatesRequestedState){
-            startActivityDetection()
-        }
+//        if (updatesRequestedState){
+//            startActivityDetection()
+//        }
+
+        startActivityDetection()
     }
 
     public override fun onStart() {
