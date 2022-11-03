@@ -25,6 +25,9 @@ internal object Constants {
     const val KEY_ACTIVITY_UPDATES_REQUESTED = PACKAGE_NAME +
             ".ACTIVITY_UPDATES_REQUESTED"
     const val KEY_DETECTED_ACTIVITIES = PACKAGE_NAME + ".DETECTED_ACTIVITIES"
+    const val LAST_ACTIVITY = "LAST_ACTIVITY"
+    const val LAST_ACTIVITY_TYPE = "LAST_ACTIVITY_TYPE"
+    const val LAST_ACTIVITY_CONFIDENCE = "LAST_ACTIVITY_CONFIDENCE"
 
     /**
      * The desired time between activity detections. Larger values result in fewer activity
@@ -47,6 +50,8 @@ internal object Constants {
         DetectedActivity.UNKNOWN
     )
     const val REQUEST_PERMISSIONS_REQUEST_CODE = 34
+    const val BACKGROUND_LOCATION_PERMISSIONS_REQUEST_CODE = 35
     const val BROADCAST_DETECTED_ACTIVITY = "activity_intent";
+    const val BROADCAST_DETECTED_LOCATION = "location_intent";
 
 }

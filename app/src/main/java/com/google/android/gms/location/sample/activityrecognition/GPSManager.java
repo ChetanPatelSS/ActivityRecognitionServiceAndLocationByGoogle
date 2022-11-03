@@ -19,7 +19,7 @@ import java.util.List;
 
 public class GPSManager implements android.location.GpsStatus.Listener
 {
-    private static final int gpsMinTime = 50000;
+    private static final int gpsMinTime = 500;
     private static final int gpsMinDistance = 0;
     private static LocationManager locationManager = null;
     private static LocationListener locationListener = null;
@@ -28,11 +28,11 @@ public class GPSManager implements android.location.GpsStatus.Listener
     public GPSManager(Context context) {
         Log.d("GPSSpeed", "speed-2-GPSManager-1");
         mContext=context;
-        GPSManager.locationListener = location -> {
+        locationListener = location -> {
             Log.d("GPSSpeed", "speed-5-GPSManager-2");
-            if (GPSManager.gpsCallback != null) {
+            if (gpsCallback != null) {
                 Log.d("GPSSpeed", "speed-6-GPSManager-3");
-                GPSManager.gpsCallback.onGPSUpdate(location);
+                gpsCallback.onGPSUpdate(location);
             }
         };
     }
@@ -54,17 +54,17 @@ public class GPSManager implements android.location.GpsStatus.Listener
     }
     public GPSCallback getGPSCallback()
     {
-        return GPSManager.gpsCallback;
+        return gpsCallback;
     }
 
     public void setGPSCallback(final GPSCallback gpsCallback) {
-        GPSManager.gpsCallback = gpsCallback;
+        this.gpsCallback = gpsCallback;
     }
 
     public void startListening(final Context context) {
         Log.d("GPSSpeed", "speed-3-startListening-1");
-        if (GPSManager.locationManager == null) {
-            GPSManager.locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        if (locationManager == null) {
+            locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
         }
 
         final Criteria criteria = new Criteria();
@@ -76,22 +76,22 @@ public class GPSManager implements android.location.GpsStatus.Listener
         criteria.setCostAllowed(true);
         criteria.setPowerRequirement(Criteria.POWER_LOW);
 
-        final String bestProvider = GPSManager.locationManager.getBestProvider(criteria, true);
+        final String bestProvider = locationManager.getBestProvider(criteria, true);
 
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions((Activity) context, new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 101);
         }
         if (bestProvider != null && bestProvider.length() > 0) {
             Log.d("GPSSpeed", "speed-3-startListening-2");
-            GPSManager.locationManager.requestLocationUpdates(bestProvider, GPSManager.gpsMinTime,
-                    GPSManager.gpsMinDistance, GPSManager.locationListener);
+            locationManager.requestLocationUpdates(bestProvider, gpsMinTime,
+                    gpsMinDistance, locationListener);
         }
         else {
-            final List<String> providers = GPSManager.locationManager.getProviders(true);
+            final List<String> providers = locationManager.getProviders(true);
             for (final String provider : providers)
             {
-                GPSManager.locationManager.requestLocationUpdates(provider, GPSManager.gpsMinTime,
-                        GPSManager.gpsMinDistance, GPSManager.locationListener);
+                locationManager.requestLocationUpdates(provider, gpsMinTime,
+                        gpsMinDistance, locationListener);
             }
         }
         Log.d("GPSSpeed", "speed-3-startListening-3");
@@ -99,10 +99,10 @@ public class GPSManager implements android.location.GpsStatus.Listener
     public void stopListening() {
         try
         {
-            if (GPSManager.locationManager != null && GPSManager.locationListener != null) {
-                GPSManager.locationManager.removeUpdates(GPSManager.locationListener);
+            if (locationManager != null && locationListener != null) {
+                locationManager.removeUpdates(locationListener);
             }
-            GPSManager.locationManager = null;
+            locationManager = null;
         }
         catch (final Exception ex) {
             ex.printStackTrace();

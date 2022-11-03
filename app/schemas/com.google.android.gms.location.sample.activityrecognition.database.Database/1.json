@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "c3e8e4e80e5d770a63386b95e03774df",
+    "identityHash": "16c228d00acc1b9b1bceff3a572fbba8",
     "entities": [
       {
         "tableName": "userActivity",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `dateAdded` TEXT NOT NULL, `activity` TEXT NOT NULL, `activityTransitionType` TEXT NOT NULL, `elapsedRealTimeNanos` INTEGER NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `speed` REAL NOT NULL, `confidence` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `dateAdded` TEXT NOT NULL, `activity` TEXT NOT NULL, `activityTransitionType` TEXT NOT NULL, `elapsedRealTimeNanos` INTEGER NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `speed` REAL NOT NULL, `confidence` INTEGER NOT NULL, `activityType` INTEGER NOT NULL, `distance` REAL NOT NULL, `session` INTEGER NOT NULL, `action` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -61,6 +61,30 @@
             "columnName": "confidence",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "activityType",
+            "columnName": "activityType",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distance",
+            "columnName": "distance",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "session",
+            "columnName": "session",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "action",
+            "columnName": "action",
+            "affinity": "INTEGER",
+            "notNull": true
           }
         ],
         "primaryKey": {
@@ -76,7 +100,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c3e8e4e80e5d770a63386b95e03774df')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '16c228d00acc1b9b1bceff3a572fbba8')"
     ]
   }
 }

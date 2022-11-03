@@ -1,12 +1,16 @@
 package com.google.android.gms.location.sample.activityrecognition
 
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.gms.location.sample.activityrecognition.Action.Companion.getAction
+import com.google.android.gms.location.sample.activityrecognition.Utils.roundOffDecimal
 import com.google.android.gms.location.sample.activityrecognition.database.UserActivity
+import kotlin.math.roundToInt
 
 class UserActivityAdapter : RecyclerView.Adapter<UserActivityAdapter.ViewHolder>() {
 
@@ -37,8 +41,12 @@ class UserActivityAdapter : RecyclerView.Adapter<UserActivityAdapter.ViewHolder>
         val ItemsViewModel = activityList[position]
 
         // sets the text to the textview from our itemHolder class
-        holder.activityText.text = ItemsViewModel.activity + " - " + ItemsViewModel.confidence
-        holder.dateTimeText.text = ItemsViewModel.dateAdded
+        val action = getAction(ItemsViewModel.action)
+        //Log.d("HAM", "distance-${ItemsViewModel.distance}")
+        val distance = roundOffDecimal(ItemsViewModel.distance)
+        //Log.d("HAM", "distanceInKm-${distance}")
+        holder.activityText.text = ItemsViewModel.activity + " - " + action + " - Confi-" + ItemsViewModel.confidence + " \nDistance-" + distance
+                holder.dateTimeText.text = ItemsViewModel.dateAdded
         holder.lateLongText.text = "Lat:- " + ItemsViewModel.latitude + " Long:- " + ItemsViewModel.longitude
         holder.speedText.text = ItemsViewModel.speed.toString() + "km/h"
 

@@ -44,7 +44,7 @@ class ActivityDetectionService : Service() {
     }
 
     // request updates and set up callbacks for success or failure
-    fun requestActivityUpdatesHandler() {
+    private fun requestActivityUpdatesHandler() {
         Log.d(TAG, "requestActivityUpdatesHandler()")
         if (mActivityRecognitionClient != null) {
             val task = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ActivityCompat.checkSelfPermission(

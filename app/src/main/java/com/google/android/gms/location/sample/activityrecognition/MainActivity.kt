@@ -16,11 +16,9 @@
 package com.google.android.gms.location.sample.activityrecognition
 
 import android.Manifest
-import android.app.PendingIntent
 import android.content.*
 import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
 import android.net.Uri
 import android.os.*
@@ -38,16 +36,19 @@ import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import androidx.work.*
-import com.google.android.gms.location.ActivityRecognitionClient
-import com.google.android.gms.location.DetectedActivity
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.*
+import com.google.android.gms.location.DetectedActivity.UNKNOWN
 import com.google.android.gms.location.sample.activityrecognition.Constants.REQUEST_PERMISSIONS_REQUEST_CODE
+import com.google.android.gms.location.sample.activityrecognition.Utils.checkBackgroundLocationPermissionAPI30
+import com.google.android.gms.location.sample.activityrecognition.Utils.checkLocationPermissionAPI28
+import com.google.android.gms.location.sample.activityrecognition.Utils.checkLocationPermissionAPI29
 import com.google.android.gms.location.sample.activityrecognition.Utils.checkPermissions
+import com.google.android.gms.location.sample.activityrecognition.Utils.checkSinglePermission
+import com.google.android.gms.location.sample.activityrecognition.Utils.distanceInKm
 import com.google.android.gms.location.sample.activityrecognition.Utils.getActivityString
 import com.google.android.gms.location.sample.activityrecognition.database.Database
 import com.google.android.gms.location.sample.activityrecognition.database.UserActivity
+import com.google.android.gms.location.sample.activityrecognition.location.LocationUpdateService
 import com.google.android.gms.location.sample.activityrecognition.services.ActivityDetectionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,7 +56,6 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity(), GPSCallback{
     private var mContext: Context? = null
@@ -69,6 +69,19 @@ class MainActivity : AppCompatActivity(), GPSCallback{
     private var mRequestActivityUpdatesButton: Button? = null
     private var mRemoveActivityUpdatesButton: Button? = null
     private var txtSpeed:TextView? = null
+
+    var latitude = 0.0
+    var longitude = 0.0
+    private var fusedLocationClient: FusedLocationProviderClient? = null // for lat and long
+    private val intervalValue:Long = 10000 //1000 * 60 * 1
+    private val fastestIntervalValue:Long = 10000 //1000 * 60 * 1
+    // for getting the current location update after every $intervalValue seconds with high accuracy
+    private val locationRequest = LocationRequest.create().apply {
+        interval = intervalValue
+        fastestInterval = fastestIntervalValue
+        priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+    }
+    var sessionDateTime = Date()
 
     /**
      * Adapter backed by a list of DetectedActivity objects.
@@ -88,7 +101,6 @@ class MainActivity : AppCompatActivity(), GPSCallback{
                 startActivity(intent)
             }
         }
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         // Get the UI widgets.
         mRequestActivityUpdatesButton =
             findViewById<View>(R.id.request_activity_updates_button) as Button
@@ -116,6 +128,10 @@ class MainActivity : AppCompatActivity(), GPSCallback{
         if (updatesRequestedState){
             startActivityDetection()
         }
+
+        //distance = distanceInKm(23.2371135, 72.6328296, 23.2157529, 72.6413329)
+        //distance = Utils.roundOffDecimal(distance)
+        //Log.d("HAM", "distanceInKm-${distance}")
     }
 
     public override fun onStart() {
@@ -125,7 +141,7 @@ class MainActivity : AppCompatActivity(), GPSCallback{
             Log.d("GPSSpeed", "speed-0-onStart-2")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 Log.d("GPSSpeed", "speed-0-onStart-3")
-                startLocationPermissionRequest()
+                isAllPermissionGrantedOrRequest()
             }
         }
         else {
@@ -146,6 +162,12 @@ class MainActivity : AppCompatActivity(), GPSCallback{
 
     private fun startActivityDetection(){
         stopActivityDetection()
+
+        if (!isAllPermissionGrantedOrRequest()){
+            return
+        }
+
+        sessionDateTime = Date()
         if (checkPermissions(this)) {
             Log.d("GPSSpeed", "speed-0-onStart-2")
             getCurrentSpeed()
@@ -154,19 +176,28 @@ class MainActivity : AppCompatActivity(), GPSCallback{
             mActivityBroadcastReceiver,
             IntentFilter(Constants.BROADCAST_DETECTED_ACTIVITY)
         )
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            mLocationBroadcastReceiver,
+            IntentFilter(Constants.BROADCAST_DETECTED_LOCATION)
+        )
 
         startService(Intent(this, ActivityDetectionService::class.java))
+        startService(Intent(this, LocationUpdateService::class.java))
         updatesRequestedState = true
+        //getLocation()
     }
 
     private fun stopActivityDetection(){
         if (mActivityBroadcastReceiver != null) {
             stopService(Intent(this, ActivityDetectionService::class.java))
+            stopService(Intent(this, LocationUpdateService::class.java))
             LocalBroadcastManager.getInstance(this).unregisterReceiver(mActivityBroadcastReceiver)
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(mLocationBroadcastReceiver)
             updatesRequestedState = false
             gpsManager?.stopListening()
             gpsManager?.gpsCallback = null
             gpsManager = null
+            fusedLocationClient?.removeLocationUpdates(locationCallback)
         }
     }
 
@@ -300,11 +331,41 @@ class MainActivity : AppCompatActivity(), GPSCallback{
             setButtonsEnabledState()
         }
 
+    private var lastActivity: String
+        get() = PreferenceManager.getDefaultSharedPreferences(this)
+            .getString(Constants.LAST_ACTIVITY, "").toString()
+        private set(activity) {
+            PreferenceManager.getDefaultSharedPreferences(this)
+                .edit()
+                .putString(Constants.LAST_ACTIVITY, activity)
+                .apply()
+        }
+
+    private var lastActivityType: Int
+        get() = PreferenceManager.getDefaultSharedPreferences(this)
+            .getInt(Constants.LAST_ACTIVITY_TYPE, UNKNOWN)
+        private set(activityType) {
+            PreferenceManager.getDefaultSharedPreferences(this)
+                .edit()
+                .putInt(Constants.LAST_ACTIVITY_TYPE, activityType)
+                .apply()
+        }
+
+    private var lastActivityConfidence: Int
+        get() = PreferenceManager.getDefaultSharedPreferences(this)
+            .getInt(Constants.LAST_ACTIVITY_CONFIDENCE, 0)
+        private set(activityType) {
+            PreferenceManager.getDefaultSharedPreferences(this)
+                .edit()
+                .putInt(Constants.LAST_ACTIVITY_CONFIDENCE, activityType)
+                .apply()
+        }
+
     companion object {
-        protected const val TAG = "MainActivity"
+        const val TAG = "MainActivity"
     }
 
-    var mActivityBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+    private var mActivityBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             // Log.d(TAG, "onReceive()");
             if (intent.action == Constants.BROADCAST_DETECTED_ACTIVITY) {
@@ -314,17 +375,54 @@ class MainActivity : AppCompatActivity(), GPSCallback{
                 mAdapter?.updateActivities(detectedActivities)
                 for (activity in detectedActivities){
                     if(activity.confidence > 70){
-                        getLocation(activity)
+                        lastActivity = getActivityString(this@MainActivity, activity.type)
+                        lastActivityType = activity.type
+                        lastActivityConfidence = activity.confidence
+                        saveLastActivityIntoDB(Action.UserActivityChanged)
                     }
                 }
             }
         }
     }
 
+    private var mLocationBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            // Log.d(TAG, "onReceive()");
+            if (intent.action == Constants.BROADCAST_DETECTED_LOCATION) {
+                latitude = intent.getDoubleExtra("latitude", 0.0)
+                longitude = intent.getDoubleExtra("longitude", 0.0)
+                saveLastActivityIntoDB(Action.LocationChanged)
+            }
+        }
+    }
+
+    private fun isAllPermissionGrantedOrRequest(): Boolean {
+        var isGranted = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !checkSinglePermission(Manifest.permission.ACTIVITY_RECOGNITION)){
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACTIVITY_RECOGNITION).not()) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), REQUEST_PERMISSIONS_REQUEST_CODE)
+            }
+            isGranted = false
+        }else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && !checkSinglePermission(Manifest.permission.ACCESS_FINE_LOCATION) &&
+            !checkSinglePermission(Manifest.permission.ACCESS_COARSE_LOCATION)){
+            this.checkLocationPermissionAPI28(Constants.BACKGROUND_LOCATION_PERMISSIONS_REQUEST_CODE)
+            isGranted = false
+        }else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !checkSinglePermission(Manifest.permission.ACCESS_FINE_LOCATION) &&
+            !checkSinglePermission(Manifest.permission.ACCESS_COARSE_LOCATION) &&
+            !checkSinglePermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)){
+            this.checkLocationPermissionAPI29(Constants.BACKGROUND_LOCATION_PERMISSIONS_REQUEST_CODE)
+            isGranted = false
+        }else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !this.checkSinglePermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)){
+            this.checkBackgroundLocationPermissionAPI30(Constants.BACKGROUND_LOCATION_PERMISSIONS_REQUEST_CODE)
+            isGranted = false
+        }
+        return isGranted
+    }
+
     private fun startLocationPermissionRequest() {
         ActivityCompat.requestPermissions(
             this@MainActivity,
-            arrayOf(Manifest.permission.ACTIVITY_RECOGNITION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION),
+            arrayOf(Manifest.permission.ACTIVITY_RECOGNITION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION),
             REQUEST_PERMISSIONS_REQUEST_CODE
         )
     }
@@ -344,8 +442,27 @@ class MainActivity : AppCompatActivity(), GPSCallback{
                     Log.i("HAM", "User interaction was cancelled.")
                 }
                 grantResults[0] == PackageManager.PERMISSION_GRANTED -> {
-                    // Permission granted.
-                    getCurrentSpeed()
+                    if (isAllPermissionGrantedOrRequest()){
+                        // Permission granted.
+                        getCurrentSpeed()
+                    }
+                }
+                else -> {
+
+                }
+            }
+        }else if (requestCode == Constants.BACKGROUND_LOCATION_PERMISSIONS_REQUEST_CODE) {
+            when {
+                grantResults.isEmpty() -> {
+                    // If user interaction was interrupted, the permission request is cancelled and you
+                    // receive empty arrays.
+                    Log.i("HAM", "User interaction was cancelled.")
+                }
+                grantResults[0] == PackageManager.PERMISSION_GRANTED -> {
+                    if (isAllPermissionGrantedOrRequest()){
+                        // Permission granted.
+                        getCurrentSpeed()
+                    }
                 }
                 else -> {
 
@@ -381,7 +498,7 @@ class MainActivity : AppCompatActivity(), GPSCallback{
         speed = location.speed.toDouble()
         currentSpeed = round(speed, 3, BigDecimal.ROUND_HALF_UP)
         kmphSpeed = round(currentSpeed * 3.6, 3, BigDecimal.ROUND_HALF_UP)
-        txtSpeed?.text = kmphSpeed.toString() + " km/h"
+        txtSpeed?.text = "$kmphSpeed km/h"
     }
 
     private fun round(unrounded: Double, precision: Int, roundingMode: Int): Double {
@@ -395,15 +512,8 @@ class MainActivity : AppCompatActivity(), GPSCallback{
             : LocationManager? = null
 
 
-    var latitude = 0.0
-    var longitude = 0.0
-    private var fusedLocationClient: FusedLocationProviderClient? = null
-    fun getLocation(activity: DetectedActivity) {
-        val activityType = getActivityString(this, activity.type)
-        val activityConfidence = activity.confidence
-        val noteDateAdded = SimpleDateFormat("dd-MM-yyyy HH:mm:ss", Locale.US).format(Date())
-        val id = Date()
 
+    private fun getLocation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -419,37 +529,40 @@ class MainActivity : AppCompatActivity(), GPSCallback{
             //                                          int[] grantResults)
             // to handle the case where the user grants the permission. See the documentation
             // for ActivityCompat#requestPermissions for more details.
-            startLocationPermissionRequest()
+            isAllPermissionGrantedOrRequest()
             return
         }else{
-            fusedLocationClient?.lastLocation?.addOnCompleteListener {
-                if (it.isSuccessful && it.result != null) {
-                    val lastLocation = it.result
-                    Log.d("HAM", "getLastLocation:-lastLocation-$lastLocation")
-                    //Toast.makeText(this, "No location detected.", Toast.LENGTH_LONG).show()
-                    if (lastLocation != null) {
-                        latitude = lastLocation.latitude
-                        longitude = lastLocation.longitude
-                        Log.d("HAM", "getLastLocation:-latitude-$latitude -- longitude-$longitude")
-                    }
-
-                }
-                else {
-                    Log.w("HAM", "getLastLocation:exception", it.exception)
-                    Toast.makeText(this, "No location detected. Make sure location is enabled on the device.", Toast.LENGTH_LONG).show()
-                }
-
-                Log.d("HAM", "getLastLocation:2==latitude-$latitude -- longitude-$longitude")
-                val newActivity = UserActivity(id, noteDateAdded, activityType ?: "", "", 1, latitude, longitude, kmphSpeed, activityConfidence)
-                val info = "Activity:- " + activityType + "  Lat:- " + latitude + "  Long:- " + longitude + "  Speed:-" + kmphSpeed
-                insertIntoDB(this, newActivity, info)
+            if (fusedLocationClient == null){
+                fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+                Log.d("HAM", "requestLocationUpdates Start -- lastActivity-$lastActivity")
+                fusedLocationClient?.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
             }
         }
     }
 
-    private fun insertIntoDB(context: Context, newActivity: UserActivity, info: String) {
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(locationResult: LocationResult) {
+            super.onLocationResult(locationResult)
+            for (location in locationResult.locations){
+                latitude = location.latitude
+                longitude = location.longitude
+                //Log.d("HAM", "onLocationResult - - lastActivity-$lastActivity -- onLocationResult:-latitude-$latitude -- longitude-$longitude")
+                //Toast.makeText(this@MainActivity,"lastActivity-$lastActivity  lat-$latitude AND long-$longitude", Toast.LENGTH_LONG).show()
+                saveLastActivityIntoDB(Action.LocationChanged)
+            }
+        }
+    }
+
+    private fun saveLastActivityIntoDB(action: Action){
+        val activityDateTime = SimpleDateFormat("dd-MM-yyyy HH:mm:ss", Locale.US).format(Date())
+        val id = Date()
+        distance = getTotalDistance()
+        val newActivity = UserActivity(id, activityDateTime, lastActivity, "", 1, latitude, longitude, kmphSpeed, lastActivityConfidence, lastActivityType, distance, sessionDateTime, action.actionId)
+        val info = "Activity:- $lastActivity  Lat:- $latitude  Long:- $longitude  Speed:-$kmphSpeed"
+
         CoroutineScope(Dispatchers.Main).launch {
             activityDatabase.addUserActivity(newActivity)
+            distance = 0.0
             observeActivity()
             val v = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
 
@@ -463,8 +576,43 @@ class MainActivity : AppCompatActivity(), GPSCallback{
         }
 
         //Toast.makeText(context, info, Toast.LENGTH_LONG).show()
-        Log.d("HAM", "ActivityTransitionReceiver-info-${info}")
-        Toast.makeText(context,info, Toast.LENGTH_LONG).show()
+        Log.d("HAM", "${action.actonName}-info-${info}")
+        Toast.makeText(this,info, Toast.LENGTH_LONG).show()
+    }
+
+    var isDistanceActivity = false
+    var lastDistanceLatitude = 0.0
+    var lastDistanceLongitude = 0.0
+    var distance = 0.0
+    var lastDistance = 0.0
+    private fun getTotalDistance(): Double {
+        var tempDistance = 0.0
+        if (lastActivityType == DetectedActivity.IN_VEHICLE){
+            if (!isDistanceActivity){
+                lastDistanceLatitude = latitude
+                lastDistanceLongitude = longitude
+                isDistanceActivity = true
+                lastDistance = 0.0
+            }else{
+                tempDistance = distanceInKm(lastDistanceLatitude, lastDistanceLongitude, latitude, longitude) + lastDistance
+                Log.d("HAM", "$lastActivity - distanceInKm-${tempDistance}")
+                lastDistanceLatitude = latitude
+                lastDistanceLongitude = longitude
+                isDistanceActivity = true
+                lastDistance = tempDistance
+            }
+        }else{
+            if (isDistanceActivity){
+                tempDistance = distanceInKm(lastDistanceLatitude, lastDistanceLongitude, latitude, longitude) + lastDistance
+                Log.d("HAM", "$lastActivity - distanceInKm-${tempDistance}")
+            }
+            lastDistanceLatitude = 0.0
+            lastDistanceLongitude = 0.0
+            isDistanceActivity = false
+            lastDistance = 0.0
+        }
+
+        return tempDistance
     }
 
     private lateinit var adapter: UserActivityAdapter
