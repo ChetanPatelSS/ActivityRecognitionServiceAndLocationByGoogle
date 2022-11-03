@@ -16,9 +16,11 @@
 package com.google.android.gms.location.sample.activityrecognition
 
 import android.Manifest
+import android.app.PendingIntent
 import android.content.*
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.net.Uri
 import android.os.*
@@ -56,6 +58,7 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity(), GPSCallback{
     private var mContext: Context? = null
