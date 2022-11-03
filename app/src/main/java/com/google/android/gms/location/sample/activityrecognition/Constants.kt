@@ -36,6 +36,8 @@ internal object Constants {
      */
     const val DETECTION_INTERVAL_IN_MILLISECONDS: Long = 5000 // every N seconds
 
+    const val LOCATION_DETECTION_INTERVAL_IN_MILLISECONDS: Long = 15000 // every N seconds
+
     /**
      * List of DetectedActivity types that we monitor in this sample.
      */

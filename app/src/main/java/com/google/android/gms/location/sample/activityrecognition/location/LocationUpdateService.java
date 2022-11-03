@@ -1,6 +1,7 @@
 package com.google.android.gms.location.sample.activityrecognition.location;
 
 import static com.google.android.gms.location.sample.activityrecognition.Constants.BROADCAST_DETECTED_LOCATION;
+import static com.google.android.gms.location.sample.activityrecognition.Constants.LOCATION_DETECTION_INTERVAL_IN_MILLISECONDS;
 
 import android.Manifest;
 import android.app.Notification;
@@ -38,7 +39,7 @@ import com.google.android.gms.location.sample.activityrecognition.Utils;
 public class LocationUpdateService extends Service {
 
     //region data
-    private static final long UPDATE_INTERVAL_IN_MILLISECONDS = 10000;// * 60 * 1;
+    private static final long UPDATE_INTERVAL_IN_MILLISECONDS = LOCATION_DETECTION_INTERVAL_IN_MILLISECONDS;
     private FusedLocationProviderClient mFusedLocationClient;
     private LocationRequest locationRequest;
     private LocationSettingsRequest locationSettingsRequest;
