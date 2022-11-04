@@ -590,7 +590,7 @@ class MainActivity : AppCompatActivity(), GPSCallback,TextToSpeech.OnInitListene
         Toast.makeText(this,info, Toast.LENGTH_LONG).show()
         try {
             val dist = Utils.roundOffDecimal(distance)
-            speakOut("$lastActivity Speed $kmphSpeed Distance $dist")
+            //speakOut("$lastActivity Speed $kmphSpeed Distance $dist")
         }catch (e:Exception){
 
         }
