@@ -343,7 +343,7 @@ class MainActivity : AppCompatActivity(), GPSCallback,TextToSpeech.OnInitListene
 
     private var lastActivity: String
         get() = PreferenceManager.getDefaultSharedPreferences(this)
-            .getString(Constants.LAST_ACTIVITY, "").toString()
+            .getString(Constants.LAST_ACTIVITY, resources.getString(R.string.still)).toString()
         private set(activity) {
             PreferenceManager.getDefaultSharedPreferences(this)
                 .edit()
