@@ -16,16 +16,15 @@
 package com.google.android.gms.location.sample.activityrecognition
 
 import android.Manifest
-import android.app.PendingIntent
 import android.content.*
 import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
 import android.net.Uri
 import android.os.*
 import android.preference.PreferenceManager
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.View
 import android.widget.Button
@@ -50,7 +49,6 @@ import com.google.android.gms.location.sample.activityrecognition.Utils.distance
 import com.google.android.gms.location.sample.activityrecognition.Utils.getActivityString
 import com.google.android.gms.location.sample.activityrecognition.database.Database
 import com.google.android.gms.location.sample.activityrecognition.database.UserActivity
-import com.google.android.gms.location.sample.activityrecognition.location.LocationUpdateService
 import com.google.android.gms.location.sample.activityrecognition.services.ActivityDetectionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,9 +56,8 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.TimeUnit
 
-class MainActivity : AppCompatActivity(), GPSCallback{
+class MainActivity : AppCompatActivity(), GPSCallback,TextToSpeech.OnInitListener{
     private var mContext: Context? = null
 
     /**
@@ -90,6 +87,9 @@ class MainActivity : AppCompatActivity(), GPSCallback{
      * Adapter backed by a list of DetectedActivity objects.
      */
     private var mAdapter: DetectedActivitiesAdapter? = null
+
+    private var tts: TextToSpeech? = null
+
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.main_activity)
@@ -135,6 +135,9 @@ class MainActivity : AppCompatActivity(), GPSCallback{
         //distance = distanceInKm(23.2371135, 72.6328296, 23.2157529, 72.6413329)
         //distance = Utils.roundOffDecimal(distance)
         //Log.d("HAM", "distanceInKm-${distance}")
+
+        // TextToSpeech(Context: this, OnInitListener: this)
+        tts = TextToSpeech(this, this)
     }
 
     public override fun onStart() {
@@ -154,6 +157,12 @@ class MainActivity : AppCompatActivity(), GPSCallback{
     }
 
     override fun onDestroy() {
+        // Shutdown TTS when
+        // activity is destroyed
+        if (tts != null) {
+            tts!!.stop()
+            tts!!.shutdown()
+        }
         super.onDestroy()
         Log.d(ActivityDetectionService.TAG, "MainActivity-onDestroy")
         stopActivityDetection()
@@ -185,7 +194,6 @@ class MainActivity : AppCompatActivity(), GPSCallback{
         )
 
         startService(Intent(this, ActivityDetectionService::class.java))
-        startService(Intent(this, LocationUpdateService::class.java))
         updatesRequestedState = true
         //getLocation()
     }
@@ -193,7 +201,6 @@ class MainActivity : AppCompatActivity(), GPSCallback{
     private fun stopActivityDetection(){
         if (mActivityBroadcastReceiver != null) {
             stopService(Intent(this, ActivityDetectionService::class.java))
-            stopService(Intent(this, LocationUpdateService::class.java))
             LocalBroadcastManager.getInstance(this).unregisterReceiver(mActivityBroadcastReceiver)
             LocalBroadcastManager.getInstance(this).unregisterReceiver(mLocationBroadcastReceiver)
             updatesRequestedState = false
@@ -581,39 +588,60 @@ class MainActivity : AppCompatActivity(), GPSCallback{
         //Toast.makeText(context, info, Toast.LENGTH_LONG).show()
         Log.d("HAM", "${action.actonName}-info-${info}")
         Toast.makeText(this,info, Toast.LENGTH_LONG).show()
+        try {
+            val dist = Utils.roundOffDecimal(distance)
+            speakOut("$lastActivity Speed $kmphSpeed Distance $dist")
+        }catch (e:Exception){
+
+        }
     }
 
-    var isDistanceActivity = false
-    var lastDistanceLatitude = 0.0
+    private var isDistanceActivity = false
+    private var lastDistanceLatitude = 0.0
     var lastDistanceLongitude = 0.0
     var distance = 0.0
-    var lastDistance = 0.0
+    private var lastDistance = 0.0
     private fun getTotalDistance(): Double {
         var tempDistance = 0.0
-        if (lastActivityType == DetectedActivity.IN_VEHICLE){
-            if (!isDistanceActivity){
-                lastDistanceLatitude = latitude
-                lastDistanceLongitude = longitude
-                isDistanceActivity = true
-                lastDistance = 0.0
-            }else{
-                tempDistance = distanceInKm(lastDistanceLatitude, lastDistanceLongitude, latitude, longitude) + lastDistance
-                Log.d("HAM", "$lastActivity - distanceInKm-${tempDistance}")
-                lastDistanceLatitude = latitude
-                lastDistanceLongitude = longitude
-                isDistanceActivity = true
-                lastDistance = tempDistance
-            }
+
+        //if (!isDistanceActivity && lastActivityType == DetectedActivity.WALKING){
+        if (!isDistanceActivity && lastActivityType == DetectedActivity.IN_VEHICLE){
+            tempDistance = distanceInKm(lastDistanceLatitude, lastDistanceLongitude, latitude, longitude) + lastDistance
+            isDistanceActivity = true
+            lastDistance = tempDistance
+        }else if (isDistanceActivity && (lastActivityType == DetectedActivity.IN_VEHICLE || lastActivityType == DetectedActivity.ON_BICYCLE || lastActivityType == DetectedActivity.TILTING)){
+            //else if (isDistanceActivity && (lastActivityType == DetectedActivity.WALKING || lastActivityType == DetectedActivity.ON_FOOT || lastActivityType == DetectedActivity.TILTING)){
+            tempDistance = distanceInKm(lastDistanceLatitude, lastDistanceLongitude, latitude, longitude) + lastDistance
+            isDistanceActivity = true
+            lastDistance = tempDistance
         }else{
             if (isDistanceActivity){
                 tempDistance = distanceInKm(lastDistanceLatitude, lastDistanceLongitude, latitude, longitude) + lastDistance
-                Log.d("HAM", "$lastActivity - distanceInKm-${tempDistance}")
             }
-            lastDistanceLatitude = 0.0
-            lastDistanceLongitude = 0.0
             isDistanceActivity = false
             lastDistance = 0.0
         }
+
+        /*if (lastActivityType == DetectedActivity.WALKING || lastActivityType == DetectedActivity.ON_FOOT){
+        //if (lastActivityType == DetectedActivity.IN_VEHICLE || lastActivityType == DetectedActivity.ON_BICYCLE){
+            tempDistance = distanceInKm(lastDistanceLatitude, lastDistanceLongitude, latitude, longitude) + lastDistance
+            isDistanceActivity = true
+            lastDistance = tempDistance
+        }else{
+            if (isDistanceActivity){
+                tempDistance = distanceInKm(lastDistanceLatitude, lastDistanceLongitude, latitude, longitude) + lastDistance
+            }
+            isDistanceActivity = false
+            lastDistance = 0.0
+        }*/
+        if (tempDistance >= 0.0){
+            Log.d("HAM", "$lastActivity - distanceInKm-${tempDistance}")
+        }else{
+            tempDistance = 0.0
+        }
+        Log.d("HAM", "$lastActivity - distanceInKm-${tempDistance}")
+        lastDistanceLatitude = latitude
+        lastDistanceLongitude = longitude
 
         return tempDistance
     }
@@ -637,5 +665,19 @@ class MainActivity : AppCompatActivity(), GPSCallback{
                 }
             }
         }
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            val result = tts!!.setLanguage(Locale.US)
+
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.e("TTS","The Language not supported!")
+            }
+        }
+    }
+
+    private fun speakOut(lastActivity: String) {
+        tts!!.speak(lastActivity, TextToSpeech.QUEUE_FLUSH, null,"")
     }
 }

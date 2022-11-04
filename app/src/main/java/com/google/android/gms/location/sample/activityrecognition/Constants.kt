@@ -34,9 +34,11 @@ internal object Constants {
      * detections while improving battery life. A value of 0 results in activity detections at the
      * fastest possible rate.
      */
-    const val DETECTION_INTERVAL_IN_MILLISECONDS: Long = 5000 // every N seconds
+    const val DETECTION_INTERVAL_IN_MILLISECONDS: Long = 15000 // every N seconds
 
     const val LOCATION_DETECTION_INTERVAL_IN_MILLISECONDS: Long = 15000 // every N seconds
+
+    const val CHANNEL_ID = "channel_01_location"
 
     /**
      * List of DetectedActivity types that we monitor in this sample.
